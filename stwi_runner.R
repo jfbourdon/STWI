@@ -19,16 +19,16 @@ path_weight <- file.path(wdir, "weight.tif")
 
 # Paramétrage de l'algorithme
 SUCTION <- 10
-AREA_TYPE <- 2    # 0 = "total catchment area" | 1 = "square root of catchment area" | 2 = "specific catchment area"
-SLOPE_TYPE <- 1   # 0 = "local slope" | 1 = "catchment slope"
+AREA_TYPE <- 0    # 0 = "total catchment area" | 1 = "square root of catchment area" | 2 = "specific catchment area"
+SLOPE_TYPE <- 0   # 0 = "local slope" | 1 = "catchment slope"
 SLOPE_MIN <- 0    # en degrés
-SLOPE_OFF <- 1    # en degrés
+SLOPE_OFF <- 0.1  # en degrés
 SLOPE_WEIGHT <- 1
 
 
 # Production à partir de SAGA GIS
-# https://saga-gis.sourceforge.io/saga_tool_doc/7.0.0/ta_hydrology_15.html
-saga_exe <- "//ulysse/LIDAR/Developpement/Hydrographie/Outils/Utilitaires/saga-7.3.0_x64/saga_cmd.exe"
+# https://saga-gis.sourceforge.io/saga_tool_doc/8.3.0/ta_hydrology_15.html
+saga_exe <- "//ulysse/LIDAR/Developpement/Hydrographie/Outils/Utilitaires/saga-8.3.0_x64/saga_cmd.exe"
 suffixe <- paste0("area", AREA_TYPE, "_slopeType", SLOPE_TYPE)
 path_TWI_SDAT <- file.path(wdir, paste0("TWI_saga_", suffixe, ".sdat"))
 path_AREA_SDAT <- file.path(wdir, paste0("AREA_saga_", suffixe, ".sdat"))

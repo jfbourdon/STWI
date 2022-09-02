@@ -2,14 +2,33 @@
 require(raster)
 
 
+## --
+# Détermine si la cellule désignée est une valeur valide,
+# soit à lintérieur de l'extent et non une valeur NoData
+# Ce sera moins compliqué dans WhiteboxTools car on peut extraire une valeur
+# en dehors de l'extent et ça nous retournera un NoData plutôt qu'une
+# erreur comme dans R avec une matrice
+is_InGrid <- function(m_grid, row, col, nodata)
+{
+  ext <- dim(m_grid)
+  ifelse(
+    (row <= ext[1] & row >= 1) & (col <= ext[2] & col >= 1),
+    ifelse(
+      m_grid[row, col] != nodata,
+      TRUE,
+      FALSE
+      ),
+    FALSE
+  )
+}
+
 
 ## --
-# Fonction pour récupérer une valeur maximale locale
+# Filtre local maximum
 Get_Local_Maximum <- function(m_grid, row, col, nodata)
 {
   dcol <- c(0, 1, 1, 1, 0,-1,-1,-1)
   drow <- c(1, 1, 0,-1,-1,-1, 0, 1)
-  ext <- dim(m_grid)
   z <- m_grid[row,col]
 
   for (ii in 1:8)
@@ -17,10 +36,10 @@ Get_Local_Maximum <- function(m_grid, row, col, nodata)
     coln <- col + dcol[ii]
     rown <- row + drow[ii]
     
-    if ( (rown <= ext[1] & rown >= 1) & (coln <= ext[2] & coln >= 1) )
+    if (is_InGrid(m_grid, rown, coln, nodata))
     {
       val <- m_grid[rown, coln]
-      if (val != nodata & val > z) z <- val
+      if (val > z) z <- val
     }
   }
   return(z)
@@ -36,7 +55,6 @@ Get_Gradient <- function(m_grid, row, col, nodata, cellsize = 1)
 {
   dcol <- c(0, 1, 0,-1)
   drow <- c(1, 0,-1, 0)
-  ext <- dim(m_grid)
   z <- m_grid[row, col]
   dz <- rep(0, 4)
 
@@ -47,25 +65,10 @@ Get_Gradient <- function(m_grid, row, col, nodata, cellsize = 1)
     colFrom <- col - dcol[ii]
     rowFrom <- row - drow[ii]
     
-    # En fait toutes les conversion de is_InGrid devraient être comme ça
-    # ce sera moins compliqué dans WhiteboxTools car on peut extraire une valeur
-    # en dehors de l'extent et ça nous retournera la valeur de nodata plutôt qu'une
-    # erreur comme dans R avec une matrice
-    is_InGrid_To <- ifelse(
-      (rowTo <= ext[1] & rowTo >= 1) & (colTo <= ext[2] & colTo >= 1),
-      ifelse(m_grid[rowTo, colTo] != nodata, TRUE, FALSE),
-      FALSE
-      )
-    is_InGrid_From <- ifelse(
-      (rowFrom <= ext[1] & rowFrom >= 1) & (colFrom <= ext[2] & colFrom >= 1),
-      ifelse(m_grid[rowFrom, colFrom] != nodata, TRUE, FALSE),
-      FALSE
-    )
-    
-    if (is_InGrid_To)
+    if (is_InGrid(m_grid, rowTo, colTo, nodata))
     {
       dz[ii] <- m_grid[rowTo, colTo] - z
-    } else if (is_InGrid_From)
+    } else if (is_InGrid(m_grid, rowFrom, colFrom, nodata))
     {
       dz[ii] <- z - m_grid[rowFrom, colFrom]
     }
@@ -132,14 +135,10 @@ Get_Area <- function(m_pDEM, m_pWeight, suction, slope_weight, nodata, cellsize 
     {
       coln <- col + dcol[ii]
       rown <- row + drow[ii]
-      if ( (rown <= ext[1] & rown >= 1) & (coln <= ext[2] & coln >= 1) )
+      if (is_InGrid(m_pDEM, rown, coln, nodata))
       {
-        val <- m_pDEM[rown, coln]
-        if (val != nodata)
-        {
-          d <- z - val
-          if (d > 0) { dz[ii] <- atan(d / length_dcolrow[ii]) ^ MFD_Converge }
-        }
+        d <- z - m_pDEM[rown, coln]
+        if (d > 0) { dz[ii] <- atan(d / length_dcolrow[ii]) ^ MFD_Converge }
       }
     }
     dzSum <- sum(dz)
@@ -151,7 +150,7 @@ Get_Area <- function(m_pDEM, m_pWeight, suction, slope_weight, nodata, cellsize 
       {
         coln <- col + dcol[ii]
         rown <- row + drow[ii]
-        if ( (rown <= ext[1] & rown >= 1) & (coln <= ext[2] & coln >= 1) )
+        if (is_InGrid(m_pDEM, rown, coln, nodata))
         {
           m_pArea[rown,coln] <- m_pArea[rown,coln] + Area * dz[ii] / dzSum
           m_pSlope[rown,coln] <- m_pSlope[rown,coln] + Slope * dz[ii] / dzSum
@@ -232,7 +231,7 @@ Get_Modified <- function(m_pArea, m_pSlope, m_Suction, nodata)
       }
     }
 
-    cat("\npass", Iteration, "(", nChanges, "> 0)")
+    cat("\npass ", Iteration, " (", nChanges, " > 0)", sep = "")
   }
 
   cat("\npost-processing...")
@@ -253,13 +252,7 @@ Get_Modified <- function(m_pArea, m_pSlope, m_Suction, nodata)
           {
             coln <- col + dcol
             
-            is_InGrid_To <- ifelse(
-              (rown <= ext[1] & rown >= 1) & (coln <= ext[2] & coln >= 1),
-              ifelse(m_pArea[rown, coln] != nodata, TRUE, FALSE),
-              FALSE
-            )
-            
-            if (is_InGrid_To)
+            if (is_InGrid(m_pArea, rown, coln, nodata))
             {
               if (Area[rown,coln] > m_pArea[rown,coln]) bModify <- TRUE
               n <- n + 1
@@ -280,12 +273,14 @@ Get_Modified <- function(m_pArea, m_pSlope, m_Suction, nodata)
 
 ## --
 # Calcul du TWI
-Get_TWI <- function(m_pAmod, m_pSlope, area_type, slope_type, slope_min, slope_offset, cellsize)
+Get_TWI <- function(m_pAmod, m_pSlope, m_pDEM, area_type, slope_type, slope_min, slope_offset, cellsize, nodata)
 {
   ext <- dim(m_pAmod)
   m_pTWI <- m_pAmod
   slope_min <- slope_min * pi / 180
   slope_offset <- slope_offset * pi / 180
+  
+  cat("\ntopographic wetness index...\n")
 
   for (row in 1:ext[1])
   {
@@ -354,7 +349,7 @@ Get_STWI <- function(rDEM, suction, area_type, slope_type, slope_weight, slope_m
   # Traitement lui-même
   ls_area <- Get_Area(m_pDEM, m_pWeight, suction, slope_weight, nodata, cellsize)
 	m_pAmod <- Get_Modified(ls_area[["m_pArea"]], ls_area[["m_pSlope"]], ls_area[["m_Suction"]], nodata)
-	m_pTWI <- Get_TWI(m_pAmod, ls_area[["m_pSlope"]], area_type, slope_type, slope_min, slope_offset, cellsize)
+	m_pTWI <- Get_TWI(m_pAmod, ls_area[["m_pSlope"]], m_pDEM, area_type, slope_type, slope_min, slope_offset, cellsize, nodata)
 	
 	
 	# Conversion de la matrice de TWI en objet raster
